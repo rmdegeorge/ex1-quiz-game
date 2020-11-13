@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 func main() {
 	// create a help flag that explains the command line arguments
 	// that our program will accept
 	csvFilename := flag.String("csv", "problems.csv", "a csv file in the format of 'question,answer'")
+	// create a flag that defines the time limit
+	timeLimit := flag.Int("limit", 30, "the time limit for the quiz in seconds")
 	flag.Parse()
 
 	// open the file and log the error if there is one
@@ -38,23 +41,44 @@ func main() {
 	// parse the lines of the file into an array called problems
 	problems := parseLines(lines)
 
+	// create a timer
+	timer := time.NewTimer(time.Duration(*timeLimit) * time.Second)
+
 	// initialize a counter for # of correct answers
 	correct := 0
 
 	// loop through each problem
 	for i, problem := range problems {
 		// Print out the problem
-		fmt.Printf("Problem #%d: %s = \n", i+1, problem.q)
+		fmt.Printf("Problem #%d: %s = ", i+1, problem.q)
 
-		var answer string
-		fmt.Scanf("%s\n", &answer) // Scanf with trim whitespaces so may not be appropriat alwasys
-		// check if answer is correct
-		if answer == problem.a {
-			fmt.Println("Correct!")
-			correct++
+		// create an answer channel
+		answerCh := make(chan string)
+
+		go func() {
+			var answer string
+			fmt.Scanf("%s\n", &answer) // Scanf with trim whitespaces so may not be appropriat alwasys
+			answerCh <- answer
+		}()
+
+		// if we get a message from the timer channel, then we stop the program and
+		// return the number of correct answers
+		select {
+		// case when timer runs out, stop and score quiz
+		case <-timer.C:
+			fmt.Printf("\nYou scored %d/%d.\n", correct, len(problems))
+			return
+		// if we get an answer from the answer channel, check and increment score if correct
+		case answer := <-answerCh:
+			if answer == problem.a {
+				correct++
+				fmt.Println("Correct! :-)")
+			} else {
+				fmt.Println("Wrong :-(")
+			}
 		}
 	}
-	fmt.Printf("You scored %d/%d.\n", correct, len(problems))
+	fmt.Printf("\nYou scored %d/%d.\n", correct, len(problems))
 }
 
 // function that parses the lines of the file into our problem type
